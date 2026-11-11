@@ -1,0 +1,89 @@
+{
+  "about": "Shared step-matching cases. Every SDK and the collector run them: matchStep(map, facts, inner), entryMatch(kind, hasParent), handoffStep(map, inherited, kind, facts), parseFlowStart(value, nowMs), globMatch(pattern, value) and stepFailed(map, flowStep, attributes, error). Keep in step with packages/schema/src/match.ts.",
+  "map": {
+    "flows": [
+      { "id": "orders", "name": "Orders", "criticality": "critical", "steps": [
+        { "id": "create-chemical", "name": "Create chemical order", "match": [{ "where": { "graphql.operation.name": "createOrder", "load.type": "chemical" } }] },
+        { "id": "create", "name": "Create order", "match": [{ "service": "api", "where": { "graphql.operation.name": "createOrder" } }] }
+      ] },
+      { "id": "planning", "name": "Planning", "criticality": "important", "steps": [
+        { "id": "plan", "name": "Plan route", "match": [{ "where": { "rpc.service": "planner.Planner", "rpc.method": "PlanRoute" } }] }
+      ] },
+      { "id": "shop", "name": "Shop", "criticality": "critical", "steps": [
+        { "id": "place-pallet", "name": "Place pallet order", "match": [{ "route": "POST /orders", "where": { "url.query": "*type=pallet*" } }] },
+        { "id": "place", "name": "Place order", "match": [{ "route": "POST /orders" }], "failWhen": [{ "http.response.status_code": "4*" }, { "business.outcome": "declined", "payment.provider": "*" }] }
+      ] },
+      { "id": "jobs", "name": "Jobs", "criticality": "background", "steps": [
+        { "id": "export", "name": "Nightly export", "match": [{ "spanName": "nightly-export" }] },
+        { "id": "tenant", "name": "Tenant work", "match": [{ "spanName": "tenant-work", "where": { "tenant.id": "*" } }] }
+      ] },
+      { "id": "billing", "name": "Billing", "criticality": "important", "steps": [
+        { "id": "invoice", "name": "Invoice", "match": [{ "queue": "invoices" }] },
+        { "id": "charge", "name": "Charge card", "match": [{ "service": "payments", "route": "POST /charges" }] }
+      ] }
+    ]
+  },
+  "match": [
+    { "name": "graphql operation and load type, inside POST /graphql", "inner": true, "facts": { "service": "api", "spanName": "mutation createOrder", "attributes": { "graphql.operation.name": "createOrder", "load.type": "chemical" } }, "expect": { "flow": "orders", "step": "create-chemical" } },
+    { "name": "graphql operation without load type", "inner": true, "facts": { "service": "api", "spanName": "mutation createOrder", "attributes": { "graphql.operation.name": "createOrder" } }, "expect": { "flow": "orders", "step": "create" } },
+    { "name": "the service filter still applies", "inner": true, "facts": { "service": "web", "attributes": { "graphql.operation.name": "createOrder" } }, "expect": null },
+    { "name": "an rpc method on a server span", "inner": false, "facts": { "service": "planner", "spanName": "planner.Planner/PlanRoute", "attributes": { "rpc.service": "planner.Planner", "rpc.method": "PlanRoute" } }, "expect": { "flow": "planning", "step": "plan" } },
+    { "name": "one endpoint split by its query string", "inner": false, "facts": { "service": "web", "method": "POST", "path": "/orders", "attributes": { "url.query": "type=pallet&count=3" } }, "expect": { "flow": "shop", "step": "place-pallet" } },
+    { "name": "the same endpoint without the query", "inner": false, "facts": { "service": "web", "method": "POST", "path": "/orders", "attributes": {} }, "expect": { "flow": "shop", "step": "place" } },
+    { "name": "a route never starts a step inside a request", "inner": true, "facts": { "service": "web", "method": "POST", "path": "/orders" }, "expect": null },
+    { "name": "a queue never starts a step inside a request", "inner": true, "facts": { "service": "worker", "queue": "invoices" }, "expect": null },
+    { "name": "a queue consumer", "inner": false, "facts": { "service": "worker", "queue": "invoices" }, "expect": { "flow": "billing", "step": "invoice" } },
+    { "name": "a span name inside a request", "inner": true, "facts": { "service": "worker", "spanName": "nightly-export" }, "expect": { "flow": "jobs", "step": "export" } },
+    { "name": "where * needs the attribute set", "inner": true, "facts": { "service": "worker", "spanName": "tenant-work", "attributes": { "tenant.id": "" } }, "expect": null },
+    { "name": "where * with the attribute set", "inner": true, "facts": { "service": "worker", "spanName": "tenant-work", "attributes": { "tenant.id": "acme" } }, "expect": { "flow": "jobs", "step": "tenant" } },
+    { "name": "no attributes at all", "inner": false, "facts": { "service": "api", "spanName": "mutation createOrder" }, "expect": null }
+  ],
+  "entry": [
+    { "kind": "server", "hasParent": false, "expect": "all" },
+    { "kind": "server", "hasParent": true, "expect": "all" },
+    { "kind": "consumer", "hasParent": true, "expect": "all" },
+    { "kind": "internal", "hasParent": false, "expect": "all" },
+    { "kind": "internal", "hasParent": true, "expect": "inner" },
+    { "kind": "client", "hasParent": true, "expect": "none" },
+    { "kind": "producer", "hasParent": false, "expect": "none" }
+  ],
+  "handoff": [
+    { "name": "a queue consumer moves the flow on to its own step", "kind": "consumer", "inherited": { "flow": "billing", "step": "charge" }, "facts": { "service": "worker", "spanName": "invoices process", "queue": "invoices" }, "expect": { "flow": "billing", "step": "invoice" } },
+    { "name": "a downstream service's request moves the flow on", "kind": "server", "inherited": { "flow": "billing", "step": "invoice" }, "facts": { "service": "payments", "method": "POST", "path": "/charges", "spanName": "POST /charges" }, "expect": { "flow": "billing", "step": "charge" } },
+    { "name": "the same step again stays where it is (a gateway in front of the service)", "kind": "server", "inherited": { "flow": "shop", "step": "place" }, "facts": { "service": "orders", "method": "POST", "path": "/orders", "spanName": "POST /orders" }, "expect": null },
+    { "name": "a step of another flow doesn't take over: the caller's flow wins", "kind": "consumer", "inherited": { "flow": "jobs", "step": "export" }, "facts": { "service": "worker", "spanName": "invoices process", "queue": "invoices" }, "expect": null },
+    { "name": "client spans never move the flow on", "kind": "client", "inherited": { "flow": "billing", "step": "invoice" }, "facts": { "service": "payments", "method": "POST", "path": "/charges", "spanName": "POST /charges" }, "expect": null },
+    { "name": "internal spans never move the flow on", "kind": "internal", "inherited": { "flow": "billing", "step": "charge" }, "facts": { "service": "worker", "spanName": "invoices process", "queue": "invoices" }, "expect": null },
+    { "name": "the service filter still applies", "kind": "server", "inherited": { "flow": "billing", "step": "invoice" }, "facts": { "service": "orders", "method": "POST", "path": "/charges", "spanName": "POST /charges" }, "expect": null }
+  ],
+  "flowStart": [
+    { "value": "1762866000000", "now": 1762866005000, "expect": 1762866000000 },
+    { "value": "1762866030000", "now": 1762866000000, "expect": 1762866030000 },
+    { "value": "1762866090000", "now": 1762866000000, "expect": null },
+    { "value": "", "now": 1762866000000, "expect": null },
+    { "value": "0", "now": 1762866000000, "expect": null },
+    { "value": "-5", "now": 1762866000000, "expect": null },
+    { "value": "1.5e12", "now": 1762866000000, "expect": null },
+    { "value": "abc", "now": 1762866000000, "expect": null }
+  ],
+  "glob": [
+    { "pattern": "createOrder", "value": "createOrder", "expect": true },
+    { "pattern": "createOrder", "value": "createOrders", "expect": false },
+    { "pattern": "*", "value": "x", "expect": true },
+    { "pattern": "*", "value": "", "expect": false },
+    { "pattern": "a.b*", "value": "a.bc", "expect": true },
+    { "pattern": "a.b*", "value": "axbc", "expect": false },
+    { "pattern": "*type=pallet*", "value": "type=pallet", "expect": true },
+    { "pattern": "(x)+*", "value": "(x)+y", "expect": true },
+    { "pattern": "a*c", "value": "a\nc", "expect": true }
+  ],
+  "failed": [
+    { "name": "an error status always fails", "flow": "shop", "step": "place", "attributes": { "http.response.status_code": "500" }, "error": true, "expect": true },
+    { "name": "a 402 fails the step whose rule says 4xx fails", "flow": "shop", "step": "place", "attributes": { "http.response.status_code": "402" }, "error": false, "expect": true },
+    { "name": "a 200 is fine", "flow": "shop", "step": "place", "attributes": { "http.response.status_code": "200" }, "error": false, "expect": false },
+    { "name": "every attribute of a rule must match", "flow": "shop", "step": "place", "attributes": { "business.outcome": "declined" }, "error": false, "expect": false },
+    { "name": "an outcome the app sets fails the step", "flow": "shop", "step": "place", "attributes": { "business.outcome": "declined", "payment.provider": "stripe" }, "error": false, "expect": true },
+    { "name": "a step without rules fails only on errors", "flow": "shop", "step": "place-pallet", "attributes": { "http.response.status_code": "402" }, "error": false, "expect": false },
+    { "name": "an unknown step fails only on errors", "flow": "nope", "step": "nope", "attributes": { "http.response.status_code": "402" }, "error": false, "expect": false }
+  ]
+}
