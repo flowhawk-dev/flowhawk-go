@@ -10,6 +10,7 @@ package flowhawk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -142,6 +143,9 @@ func Init(o Options) (func(context.Context) error, error) {
 	headers := map[string]string{}
 	if apiKey != "" {
 		headers["Authorization"] = "Bearer " + apiKey
+	}
+	if why := plainHTTPKeyWarning(endpoint, apiKey, os.Getenv("FLOWHAWK_ALLOW_INSECURE_CONTROL_URL") == "true"); why != "" {
+		fmt.Fprintf(os.Stderr, "[flowhawk-sdk] %s\n", why)
 	}
 
 	// host.name as the other SDKs set it; OTEL_RESOURCE_ATTRIBUTES still wins.

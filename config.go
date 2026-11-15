@@ -47,7 +47,7 @@ type BusinessMap struct {
 // DefaultRedactAttributes are the attributes redacted by default (DEFAULT_REDACT_ATTRIBUTES in
 // packages/schema/src/index.ts). They apply when no policy is loaded (before the first config, or after
 // the control plane has been unreachable), so redaction fails closed.
-var DefaultRedactAttributes = []string{"user.email", "card.number", "http.request.header.authorization"}
+var DefaultRedactAttributes = []string{"user.email", "card.number", "http.request.header.authorization", "http.request.header.cookie", "http.response.header.set-cookie", "http.request.header.x-api-key"}
 
 // attributeRules are the attributes a policy drops and redacts; with no policy, nothing is dropped
 // and the default redaction applies.

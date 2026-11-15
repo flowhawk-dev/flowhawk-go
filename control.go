@@ -23,7 +23,7 @@ import (
 // everything and tags nothing. Same protocol as the Node and Python SDKs.
 
 // SDKID identifies this SDK to the control plane.
-const SDKID = "flowhawk-go/0.1.0"
+const SDKID = "flowhawk-go/0.1.1"
 
 type configStatus struct {
 	Hash   string `json:"last_remote_config_hash"`
@@ -84,6 +84,17 @@ func insecureControlURL(raw, apiKey string, allow bool) string {
 		return ""
 	}
 	return fmt.Sprintf("refusing to send the ingest key to %s://%s over plain http: use https, or set FLOWHAWK_ALLOW_INSECURE_CONTROL_URL=true on a private network", u.Scheme, u.Host)
+}
+
+// plainHTTPKeyWarning is a warning when telemetry carries the ingest key over plain http to another machine, or "".
+// Unlike the control URL this is not refused: a collector on the team's own network often listens on plain http. The
+// same check as insecureControlURL, and FLOWHAWK_ALLOW_INSECURE_CONTROL_URL=true silences it.
+func plainHTTPKeyWarning(endpoint, apiKey string, allow bool) string {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "http" || insecureControlURL(endpoint, apiKey, allow) == "" {
+		return ""
+	}
+	return fmt.Sprintf("sending the ingest key to http://%s over plain http, where anyone on the network can read it: use https, or set FLOWHAWK_ALLOW_INSECURE_CONTROL_URL=true if this is a collector on your private network", u.Host)
 }
 
 func (c *controlClient) start() {
