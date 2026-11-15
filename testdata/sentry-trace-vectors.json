@@ -1,5 +1,5 @@
 {
-  "about": "sentry-trace headers (Sentry's SDKs, mobile included) that every backend SDK continues as the parent of its server span, and those it ignores. Pinned by the tests of the Node, Python, Go, Java, .NET, Ruby and PHP SDKs. A valid header is always continued as sampled: Flowhawk's own sampling decides, never the phone's tracesSampleRate. A traceparent header wins when both are sent.",
+  "about": "sentry-trace headers (Sentry's SDKs, mobile included) that every backend SDK continues as the parent of its server span, and those it ignores. Pinned by the tests of the Node, Python, Go, Java, .NET, Ruby, PHP and Rust SDKs. A valid header is always continued as sampled: Flowhawk's own sampling decides, never the phone's tracesSampleRate. A traceparent header wins when both are sent.",
   "vectors": [
     { "header": "771a43a4192642f0b136d5159a501700-b1d8a3f1e2c34567-1", "traceId": "771a43a4192642f0b136d5159a501700", "spanId": "b1d8a3f1e2c34567" },
     { "header": "771a43a4192642f0b136d5159a501700-b1d8a3f1e2c34567-0", "traceId": "771a43a4192642f0b136d5159a501700", "spanId": "b1d8a3f1e2c34567" },

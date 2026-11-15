@@ -235,13 +235,13 @@ func (c *collect) ForceFlush(context.Context) error { return nil }
 
 var secretAttrs = []attribute.KeyValue{
 	attribute.String("user.email", "a@b.c"), attribute.String("card.number", "4242424242424242"),
-	attribute.String("http.request.header.authorization", "Bearer s3cret"), attribute.String("keep", "y"),
+	attribute.String("http.request.header.authorization", "Bearer s3cret"), attribute.String("http.request.header.cookie", "sid=s3cret"), attribute.String("http.response.header.set-cookie", "sid=s3cret"), attribute.String("http.request.header.x-api-key", "s3cret"), attribute.String("keep", "y"),
 }
 
 // Redaction fails closed: with no policy loaded (before the first config, or dropped as stale) spans
 // and logs still get the default redaction.
 func TestNoPolicyLoadedStillRedactsSpansAndLogs(t *testing.T) {
-	if strings.Join(DefaultRedactAttributes, ",") != "user.email,card.number,http.request.header.authorization" {
+	if strings.Join(DefaultRedactAttributes, ",") != "user.email,card.number,http.request.header.authorization,http.request.header.cookie,http.response.header.set-cookie,http.request.header.x-api-key" {
 		t.Fatalf("DefaultRedactAttributes %v differs from the schema default", DefaultRedactAttributes)
 	}
 	check := func(what string, a map[string]string) {
@@ -1136,4 +1136,19 @@ func TestARequestWhoseCallerDidNotSampleItStillCounts(t *testing.T) {
 type FlowStepJSON struct {
 	Flow string `json:"flow"`
 	Step string `json:"step"`
+}
+
+func TestPlainHTTPKeyWarning(t *testing.T) {
+	key := "flowhawk_ingest_x"
+	for _, ok := range []string{"https://ingest.flowhawk.dev", "http://localhost:4318", "http://127.0.0.1:4318", "http://[::1]:4318"} {
+		if why := plainHTTPKeyWarning(ok, key, false); why != "" {
+			t.Fatalf("%s: %s", ok, why)
+		}
+	}
+	if plainHTTPKeyWarning("http://otel-collector:4318", "", false) != "" || plainHTTPKeyWarning("http://otel-collector:4318", key, true) != "" {
+		t.Fatal("no key, or allowed on a private network: no warning")
+	}
+	if why := plainHTTPKeyWarning("http://otel-collector:4318", key, false); !strings.HasPrefix(why, "sending the ingest key to http://otel-collector:4318 over plain http") {
+		t.Fatal(why)
+	}
 }
