@@ -8,6 +8,19 @@ go get github.com/flowhawk-dev/flowhawk-go
 
 Docs: [flowhawk.dev/docs/sending-data](https://flowhawk.dev/docs/sending-data).
 
+## Where it sends
+
+On the hosted service, set these where the service runs. The key is a **Services** key from Settings > API keys.
+
+```
+FLOWHAWK_API_KEY=<ingest key>
+FLOWHAWK_CONTROL_URL=https://api.flowhawk.dev
+OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.flowhawk.dev
+FLOWHAWK_ENVIRONMENT=production
+```
+
+Without the two addresses the SDK sends to a Flowhawk on this machine (`http://localhost:4000` and `http://localhost:4318`). Set `FLOWHAWK_ENVIRONMENT` where the service runs in production: flow health, flow alerts and the watcher count `production` and `prod` only, and an SDK with no environment reports `development`.
+
 ```go
 import flowhawk "github.com/flowhawk-dev/flowhawk-go"
 
